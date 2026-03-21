@@ -1,73 +1,92 @@
 import random
+import matplotlib.pyplot as plt
 from collections import defaultdict
 from typing import List, Optional, Tuple
 
 
+#ENVIRONMENT - TICTACTOE BOARD
 class TicTacToe:
-    def __init__(self) -> None:
+    """=======================
+    Инициализация методов доски
+    - очистка, состояние (вектор из 1/0/-1)
+    - проверка победителей
+    - действия в позиции
+    - вывод
+    - шаг
+    ========================"""
+    def __init__(self):
         self.reset()
-
-    def reset(self) -> Tuple[int, ...]:
+    
+    def reset(self):
         self.board: List[int] = [0] * 9
-        self.current_player: int = 1  # 1 = X, -1 = O
-        self.done: bool = False
+        self.current_player: int = 1        #1 - AGENT_X, -1 - HUMAN_O
         self.winner: Optional[int] = None
+        self.done: bool = False
         return self.get_state()
-
+    
     def get_state(self) -> Tuple[int, ...]:
         return tuple(self.board)
-
+    
     def available_actions(self) -> List[int]:
         return [i for i, cell in enumerate(self.board) if cell == 0]
 
     def check_winner(self) -> Optional[int]:
+        """
+        Смотрим суммы по всем возможным позициям
+        -> int = +- 1 для победителя если набралось в ряд
+        -> None если нет победителя в данной позиции
+        """
         lines = [
-            (0, 1, 2), (3, 4, 5), (6, 7, 8),
-            (0, 3, 6), (1, 4, 7), (2, 5, 8),
-            (0, 4, 8), (2, 4, 6)
+            (0,1,2), (3,4,5), (6,7,8),
+            (0,3,6), (1,4,7), (2,5,8), 
+            (0,4,8), (2,4,6)
         ]
-        for a, b, c in lines:
+
+        for a,b,c in lines:
             s = self.board[a] + self.board[b] + self.board[c]
             if s == 3:
                 return 1
-            if s == -3:
+            elif s == -3:
                 return -1
         return None
+    
+    def render(self) -> None:
+        symbols = {1: "X", -1: "O", 0: "."}
+        for i in range(0, 9, 3):
+            print(" ".join(symbols[self.board[j]] for j in range(i, i+3)))
 
-    def step(self, action: int) -> Tuple[Tuple[int, ...], float, bool]:
+    def step(self, action):
+        """
+        возвращаем вектор доски, reward, окончена ли партия
+        """
         if self.done:
-            raise ValueError("Игра уже завершена.")
+            return self.get_state(), 0.0, True
+
         if action not in self.available_actions():
-            raise ValueError(f"Недопустимый ход: {action}")
+            raise ValueError("Недопустимый ход")
 
         self.board[action] = self.current_player
 
         winner = self.check_winner()
-        if winner is not None:
-            self.done = True
+        if winner:
             self.winner = winner
-            reward = 1.0
-            return self.get_state(), reward, True
+            self.reward = 1.0
+            self.done = True
+            return self.get_state(), self.reward, self.done 
 
         if not self.available_actions():
             self.done = True
             self.winner = 0
-            reward = 0.5
-            return self.get_state(), reward, True
-
+            self.reward = 0.5 #draw
+            return self.get_state(), self.reward, self.done
+        
         self.current_player *= -1
         return self.get_state(), 0.0, False
+    
 
-    def render(self) -> None:
-        symbols = {1: "X", -1: "O", 0: "."}
-        for i in range(0, 9, 3):
-            print(" ".join(symbols[self.board[j]] for j in range(i, i + 3)))
-        print()
-
-
-class QAgent:
-    def __init__(
-        self,
+#AGENT - CLASS AGENT
+class Agent:
+    def __init__(self,
         alpha: float = 0.2,
         gamma: float = 0.9,
         epsilon: float = 1.0,
@@ -80,58 +99,55 @@ class QAgent:
         self.epsilon = epsilon
         self.epsilon_decay = epsilon_decay
         self.epsilon_min = epsilon_min
-
-    def state_key(self, state: Tuple[int, ...], player: int) -> Tuple[Tuple[int, ...], int]:
-        return state, player
+        self.epsilon_trace = []
 
     def get_q(self, state: Tuple[int, ...], player: int, action: int) -> float:
         return self.q[(self.state_key(state, player), action)]
 
+    def state_key(self, state: Tuple[int, ...], player: int) -> Tuple[Tuple[int, ...], int]:
+        return state, player
+    
     def choose_action(self, state: Tuple[int, ...], player: int, actions: List[int], training: bool = True) -> int:
         if not actions:
-            raise ValueError("Нет доступных ходов.")
-
+            raise ValueError("Нет доступных ходов")
         if training and random.random() < self.epsilon:
             return random.choice(actions)
-
-        q_values = [self.get_q(state, player, a) for a in actions]
-        max_q = max(q_values)
-        best_actions = [a for a, qv in zip(actions, q_values) if qv == max_q]
+        
+        q_values = [self.get_q(state, player, act) for act in actions]
+        best = max(q_values)
+        best_actions = [act for act, qva in zip(actions, q_values) if qva == best]
         return random.choice(best_actions)
-
+    
     def update(
-        self,
-        state: Tuple[int, ...],
-        player: int,
-        action: int,
-        reward: float,
-        next_state: Tuple[int, ...],
-        next_player: int,
-        next_actions: List[int],
-        done: bool,
-    ) -> None:
-        old_q = self.get_q(state, player, action)
-
-        if done:
-            target = reward
-        else:
-            next_q = max((self.get_q(next_state, next_player, a) for a in next_actions), default=0.0)
-            target = reward + self.gamma * next_q
-
-        self.q[(self.state_key(state, player), action)] = old_q + self.alpha * (target - old_q)
-
-    def decay_epsilon(self) -> None:
-        self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
+            self,
+            state: Tuple[int, ...],   
+            action: int,
+            player: int,
+            reward: float,
+            next_state: Tuple[int, ...],
+            next_actions: List[int],
+            next_player: int,
+            done: bool
+        ) -> None:
+            old_q = self.get_q(state, player, action)
+            if done: target = reward
+            else:
+                target = reward + self.gamma * (max(self.epsilon_min, self.epsilon_decay * self.epsilon))
+            
+            self.q[(self.state_key(state, player), action)] = old_q + self.gamma * (target - old_q)
 
 
-def train(agent: QAgent, episodes: int = 200000) -> None:
+    def decay_epsilon(self):
+        self.epsilon = max(self.epsilon_min, self.epsilon_decay * self.epsilon)
+        
+
+def train(agent: Agent, epochs: int = 200_000) -> None:
     env = TicTacToe()
 
-    for episode in range(episodes):
+    for episode in range(epochs):
         state = env.reset()
-
         last_move = {
-            1: None,   # (state, player, action)
+            1: None,
             -1: None
         }
 
@@ -139,63 +155,60 @@ def train(agent: QAgent, episodes: int = 200000) -> None:
             player = env.current_player
             actions = env.available_actions()
             action = agent.choose_action(state, player, actions, training=True)
-
+            
             prev_state = state
             next_state, reward, done = env.step(action)
 
             last_move[player] = (prev_state, player, action)
-
             if done:
                 if reward == 1.0:
-                    # текущий игрок победил
                     agent.update(
-                        state=prev_state,
                         player=player,
+                        state=prev_state,
                         action=action,
                         reward=1.0,
                         next_state=next_state,
-                        next_player=env.current_player,
                         next_actions=[],
-                        done=True,
+                        next_player=env.current_player,
+                        done = True
                     )
-
+                
                     loser = -player
-                    if last_move[loser] is not None:
+                    if last_move[loser] != None:
                         ls, lp, la = last_move[loser]
                         agent.update(
-                            state=ls,
                             player=lp,
+                            state=ls,
                             action=la,
                             reward=-1.0,
                             next_state=next_state,
-                            next_player=env.current_player,
                             next_actions=[],
-                            done=True,
+                            next_player=env.current_player,
+                            done = True
                         )
                 else:
-                    # ничья
                     agent.update(
-                        state=prev_state,
                         player=player,
+                        state=prev_state,
                         action=action,
                         reward=0.5,
                         next_state=next_state,
-                        next_player=env.current_player,
                         next_actions=[],
-                        done=True,
+                        next_player=env.current_player,
+                        done = True
                     )
                     other = -player
-                    if last_move[other] is not None:
+                    if last_move[other] != None:
                         os, op, oa = last_move[other]
                         agent.update(
-                            state=os,
                             player=op,
+                            state=os,
                             action=oa,
                             reward=0.5,
                             next_state=next_state,
-                            next_player=env.current_player,
                             next_actions=[],
-                            done=True,
+                            next_player=env.current_player,
+                            done = True
                         )
                 break
             else:
@@ -208,71 +221,81 @@ def train(agent: QAgent, episodes: int = 200000) -> None:
                     next_state=next_state,
                     next_player=env.current_player,
                     next_actions=next_actions,
-                    done=False,
+                    done=False
                 )
                 state = next_state
-
+        
+        agent.epsilon_trace.append(agent.epsilon)
         agent.decay_epsilon()
+        if episode % 10000 == 0:
+            print(f"Epoch: {episode}/{epochs}, epsilon: {agent.epsilon:.4f}")
 
-        if (episode + 1) % 20000 == 0:
-            print(f"Эпизод {episode + 1}/{episodes}, epsilon={agent.epsilon:.4f}")
 
-
-def human_vs_agent(agent: QAgent, human_symbol: str = "O") -> None:
+def play(agent: Agent, human_sym: str = "O"):
     env = TicTacToe()
     state = env.reset()
-
-    symbol_to_player = {"X": 1, "O": -1}
-    human_player = symbol_to_player[human_symbol.upper()]
+    symbol = {1: "X", -1: "O"}
+    human_player = 1 if human_sym == "X" else -1
     agent_player = -human_player
 
-    print("Нумерация клеток:")
-    print("0 1 2")
-    print("3 4 5")
-    print("6 7 8\n")
-
-    while not env.done:
+    print("Нумерация клеток\n" \
+    "0 1 2\n" \
+    "3 4 5\n" \
+    "6 7 8" \
+    "")
+    while True:
+        while not env.done:
+            env.render()
+            player = env.current_player
+            if player == human_player:
+                actions = env.available_actions()
+                while True:
+                    try:
+                        move = input(f"Ваш ход: ({'X' if human_player == 1 else 'O'}): ")
+                        if move == "Exit":
+                            raise KeyboardInterrupt("Игра завершена.")
+                        move = int(move)
+                        if move not in actions:
+                            print("Неверный ход")
+                            continue
+                        break
+                    except ValueError:
+                        print("Введите номер клетки от 0 до 8 включительно.")
+                state, _, _ = env.step(move)
+            else:
+                actions = env.available_actions()
+                move = agent.choose_action(state, agent_player, actions, training=False)
+                print(f"Ход агента: {move}")
+                state, _, _ = env.step(move)
         env.render()
-        player = env.current_player
-
-        if player == human_player:
-            actions = env.available_actions()
-            while True:
-                try:
-                    move = int(input(f"Ваш ход ({'X' if human_player == 1 else 'O'}): "))
-                    if move not in actions:
-                        print("Эта клетка занята или ход недопустим.")
-                        continue
-                    break
-                except ValueError:
-                    print("Введите число от 0 до 8.")
-            state, _, _ = env.step(move)
+        if env.winner == 0:
+            print("Ничья.")
+        elif env.winner == human_player:
+            print("Вы победили!")
         else:
-            actions = env.available_actions()
-            move = agent.choose_action(state, player, actions, training=False)
-            print(f"Ход агента: {move}")
-            state, _, _ = env.step(move)
+            print("Модель победила.")
+        env.reset()
 
-    env.render()
-    if env.winner == 0:
-        print("Ничья.")
-    elif env.winner == human_player:
-        print("Вы победили.")
-    else:
-        print("Агент победил.")
+
+def main():
+    print("TIC TAC TOE")
+    agent = Agent(
+        alpha = 0.2,
+        gamma = 0.9,
+        epsilon = 1.0,
+        epsilon_decay = 0.99997,
+        epsilon_min = 0.005
+    )
+    train(agent, epochs=200_000)
+    plt.plot(range(1, 200_000+1), agent.epsilon_trace, marker='')
+    plt.xlabel("Эпизод")
+    plt.ylabel("Эпсилон")
+    plt.title("Смена epsilon в epsilon-greedy политике по эпохам")
+    plt.grid(True)
+    plt.show()
+    print("Game in process")
+    play(agent=agent, human_sym='O')
 
 
 if __name__ == "__main__":
-    agent = QAgent(
-        alpha=0.2,
-        gamma=0.95,
-        epsilon=1.0,
-        epsilon_decay=0.99995,
-        epsilon_min=0.05,
-    )
-
-    print("Обучение...")
-    train(agent, episodes=200000)
-
-    print("\nТеперь можно сыграть против агента.")
-    human_vs_agent(agent, human_symbol="O")
+    main()
