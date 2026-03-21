@@ -230,6 +230,22 @@ def train(agent: Agent, epochs: int = 200_000) -> None:
         if episode % 10000 == 0:
             print(f"Epoch: {episode}/{epochs}, epsilon: {agent.epsilon:.4f}")
 
+def plot_state_action_values(agent: Agent, state: Tuple[int, ...], player: int):
+    actions = [i for i, cell in enumerate(state) if cell == 0]
+    if not actions:
+        print("Для этого состояния нет доступных действий.")
+        return
+
+    q_values = [agent.get_q(state, player, a) for a in actions]
+
+    plt.figure(figsize=(8, 4))
+    plt.bar(actions, q_values)
+    plt.xlabel("Действие (номер клетки)")
+    plt.ylabel("Q(state, player, action)")
+    plt.title(f"Оценки действий для состояния, player = {player}")
+    plt.xticks(actions)
+    plt.grid(True, axis='y')
+    plt.show()
 
 def play(agent: Agent, human_sym: str = "O"):
     env = TicTacToe()
@@ -287,6 +303,12 @@ def main():
         epsilon_min = 0.005
     )
     train(agent, epochs=200_000)
+    test_state = (
+    1, -1, 0,
+    0,  1, 0,
+    -1, 0, 0
+    )
+    plot_state_action_values(agent=agent, state=test_state, player=1)
     plt.plot(range(1, 200_000+1), agent.epsilon_trace, marker='')
     plt.xlabel("Эпизод")
     plt.ylabel("Эпсилон")
