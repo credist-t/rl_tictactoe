@@ -116,6 +116,7 @@ class Agent:
         q_values = [self.get_q(state, player, act) for act in actions]
         best = max(q_values)
         best_actions = [act for act, qva in zip(actions, q_values) if qva == best]
+        # print(best_actions)
         return random.choice(best_actions)
     
     def update(
@@ -132,9 +133,10 @@ class Agent:
             old_q = self.get_q(state, player, action)
             if done: target = reward
             else:
-                target = reward + self.gamma * (max(self.epsilon_min, self.epsilon_decay * self.epsilon))
+                next_q = max(self.get_q(state=next_state, player=next_player, action=act) for act in next_actions)
+                target = reward - self.gamma * next_q
             
-            self.q[(self.state_key(state, player), action)] = old_q + self.gamma * (target - old_q)
+            self.q[(self.state_key(state, player), action)] = old_q + self.alpha * (target - old_q)
 
 
     def decay_epsilon(self):
@@ -234,14 +236,14 @@ def plot_state_action_values(agent: Agent, state: Tuple[int, ...], player: int):
     actions = [i for i, cell in enumerate(state) if cell == 0]
     if not actions:
         print("Для этого состояния нет доступных действий.")
-        return
+        return None
 
     q_values = [agent.get_q(state, player, a) for a in actions]
 
     plt.figure(figsize=(8, 4))
     plt.bar(actions, q_values)
     plt.xlabel("Действие (номер клетки)")
-    plt.ylabel("Q(state, player, action)")
+    plt.ylabel("Q(Tuple[state, player], action)")
     plt.title(f"Оценки действий для состояния, player = {player}")
     plt.xticks(actions)
     plt.grid(True, axis='y')
@@ -278,7 +280,7 @@ def play(agent: Agent, human_sym: str = "O"):
                     except ValueError:
                         print("Введите номер клетки от 0 до 8 включительно.")
                 state, _, _ = env.step(move)
-            else:
+            else:   
                 actions = env.available_actions()
                 move = agent.choose_action(state, agent_player, actions, training=False)
                 print(f"Ход агента: {move}")
@@ -299,16 +301,20 @@ def main():
         alpha = 0.2,
         gamma = 0.9,
         epsilon = 1.0,
-        epsilon_decay = 0.99997,
+        epsilon_decay = 0.99995,
         epsilon_min = 0.005
     )
     train(agent, epochs=200_000)
+
+    #график оценки случайного состояния Q ((s, p), a)
     test_state = (
-    1, -1, 0,
-    0,  1, 0,
-    -1, 0, 0
+    -1, 0, 1, 
+    0, 0, -1, 
+    0, 0, 1 
     )
     plot_state_action_values(agent=agent, state=test_state, player=1)
+
+
     plt.plot(range(1, 200_000+1), agent.epsilon_trace, marker='')
     plt.xlabel("Эпизод")
     plt.ylabel("Эпсилон")
