@@ -243,22 +243,26 @@ def td_sarsa_learning(agent: Agent, epochs: int = 200_000) -> None:
         if episode % 10000 == 0:
             print(f"Epoch: {episode}/{epochs}, epsilon: {agent.epsilon:.4f}")
 
-def plot_state_action_values(agent: Agent, state: Tuple[int, ...], player: int):
+def plot_state_values(agent: Agent, state: Tuple[int, ...], player: int):
     actions = [i for i, cell in enumerate(state) if cell == 0]
     if not actions:
-        print("Для этого состояния нет доступных действий.")
+        print("Для этого состояния нет доступных действий")
         return None
+    
+    q_vals = [agent.get_q(state, player, a) for a in actions]
+    v_s = (1-agent.epsilon + agent.epsilon/len(actions)) * max(q_vals) + (agent.epsilon/len(actions)) * sum(q_vals)
+    plt.figure(figsize=(7, 4))
+    plt.bar([str(a) for a in actions], q_vals, label="Q(s, a)")
+    plt.axhline(v_s, linestyle="--", label=f"V(s) = {v_s:.3f}", color='red')
 
-    q_values = [agent.get_q(state, player, a) for a in actions]
-
-    plt.figure(figsize=(8, 4))
-    plt.bar(actions, q_values)
-    plt.xlabel("Действие (номер клетки)")
-    plt.ylabel("Q(Tuple[state, player], action)")
-    plt.title(f"Оценки действий для состояния, player = {player}")
-    plt.xticks(actions)
-    plt.grid(True, axis='y')
+    plt.xlabel("Действие")
+    plt.ylabel("Значение")
+    plt.title(f"Q(s,a) и V(s) для состояния {state}")
+    plt.grid(True, axis="y")
+    plt.legend()
     plt.show()
+
+
 
 def play(agent: Agent, human_sym: str = "O"):
     env = TicTacToe()
@@ -323,8 +327,8 @@ def main():
     0, 0, -1, 
     0, -1, 1 
     )
-    plot_state_action_values(agent=agent, state=test_state, player=1)
 
+    plot_state_values(agent=agent, state=test_state, player=1)
 
     plt.plot(range(1, 200_000+1), agent.epsilon_trace, marker='')
     plt.xlabel("Эпизод")
