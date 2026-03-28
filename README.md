@@ -18,5 +18,5 @@
 [. . X]<br>
 [. . O]<br>
 [. O X]<br>
-График. 3 Оценка позиции S'
+График. 3 Оценка Q((S', p), a)
 <img width="935" height="621" alt="изображение" src="https://github.com/user-attachments/assets/37638470-dd1b-4362-b494-0d63f28dae6f" />
